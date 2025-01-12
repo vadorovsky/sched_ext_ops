@@ -5,16 +5,8 @@ use core::{
     slice,
 };
 
-use thiserror::Error;
-
 pub mod bindings;
 use bindings::sched_ext_ops;
-
-#[derive(Debug, Error)]
-pub enum SchedExtOpsError {
-    #[error("name can have at most 127 characters, got {0}")]
-    NameTooLong(usize),
-}
 
 #[repr(transparent)]
 pub struct SchedExtOps {
@@ -22,10 +14,10 @@ pub struct SchedExtOps {
 }
 
 impl SchedExtOps {
-    pub fn new(name: &CStr) -> Result<Self, SchedExtOpsError> {
-        let name_len = name.count_bytes();
+    pub fn new(name: &CStr) -> Self {
+        let mut name_len = name.count_bytes();
         if name_len > 127 {
-            return Err(SchedExtOpsError::NameTooLong(name_len));
+            name_len = 127;
         }
 
         let mut c_name_buf: [c_char; 128] = [0; 128];
@@ -41,10 +33,10 @@ impl SchedExtOps {
         // SAFETY: We are sure about the length of the string and we add one
         // more byte for the NUL character.
         let name_bytes: &[c_char] =
-            unsafe { slice::from_raw_parts(name.as_ptr(), name_len + 1) };
+            unsafe { slice::from_raw_parts(name.as_ptr(), name_len) };
         c_name_buf[..name_bytes.len()].copy_from_slice(name_bytes);
 
-        Ok(Self {
+        Self {
             _inner: sched_ext_ops {
                 // TODO: Wrap functions.
                 select_cpu: None,
@@ -89,7 +81,7 @@ impl SchedExtOps {
 
                 name: c_name_buf,
             },
-        })
+        }
     }
 }
 
@@ -101,7 +93,7 @@ mod test {
 
     #[test]
     fn test_sched_ext_ops_minimal() {
-        let minimal = SchedExtOps::new(c"minimal").unwrap();
+        let minimal = SchedExtOps::new(c"minimal");
 
         let inner_name: &[c_char] = &minimal._inner.name;
         let inner_name: &[u8] = unsafe { mem::transmute::<&[c_char], &[u8]>(inner_name) };
@@ -112,8 +104,12 @@ mod test {
 
     #[test]
     fn test_sched_ext_ops_name_too_long() {
-        let res = SchedExtOps::new(c"hgsdlfgdsfgfdsgsdfagsdfgfdsgfdsgdfgdsfghfdshsdfgfdgfdgsdfgfdsgsdfgsdfhdgfhsfdgafdsgfdgsdfgfdgsdfgfdsgsdfdsgdfgsgdsfggdfsggfhgfdjhfgjgfhfdsrdgragsfdhgsdrgdthdfhgfdgfdgrdgsrgsdrtgdrgdfg");
+        let ops = SchedExtOps::new(c"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyy");
 
-        assert!(matches!(res, Err(SchedExtOpsError::NameTooLong(_))));
+        let inner_name: &[c_char] = &ops._inner.name;
+        let inner_name: &[u8] = unsafe { mem::transmute::<&[c_char], &[u8]>(inner_name) };
+        let inner_name = CStr::from_bytes_until_nul(inner_name).unwrap();
+
+        assert_eq!(inner_name, c"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
     }
 }
