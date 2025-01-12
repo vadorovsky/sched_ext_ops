@@ -1,6 +1,6 @@
 [package]
 name = "sched_ext_ops"
-version = "0.0.1"
+version = "0.0.2"
 description = "Rust structs representing sched-ext-related types in Linux."
 keywords = ["linux", "sched-ext", "scheduler"]
 license = "MIT"
